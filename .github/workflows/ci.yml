@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Checkout forsyteco-spec
+        uses: actions/checkout@v4
+        with:
+          repository: forsyteco/forsyteco-spec
+          path: forsyteco-spec
+          ref: main
+        continue-on-error: true
+
+      - name: Link local spec (monorepo layout)
+        run: |
+          if [ ! -d ../forsyteco-spec ]; then
+            ln -s "$GITHUB_WORKSPACE/forsyteco-spec" ../forsyteco-spec || true
+          fi
+        working-directory: ${{ github.workspace }}
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: node scripts/validate-local.mjs
+      - name: Verify golden snapshots are current
+        run: git diff --exit-code test-output/

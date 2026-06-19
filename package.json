@@ -13,8 +13,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "fixtures": "node test/fixtures/build-fixtures.mjs",
     "generate": "node scripts/generate.mjs",
-    "validate:local": "node scripts/validate-local.mjs",
-    "validate:http": "node scripts/validate-http.mjs"
+    "validate:local": "pnpm build && node scripts/validate-local.mjs",
+    "validate:http": "node scripts/validate-http.mjs",
+    "write:consumer": "node scripts/write-consumer-generated.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -40,5 +41,14 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   },
-  "packageManager": "pnpm@10.4.1"
+  "packageManager": "pnpm@10.4.1",
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
+  }
 }

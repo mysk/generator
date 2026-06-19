@@ -1,15 +1,14 @@
-import pluralize from "pluralize";
 import { ApibuilderServiceJson } from "../types";
 import {
-  applicationKeyToKebab,
-  enumKeyToClassName,
-  generatedDir,
-  generatedFileName,
-  generatedSiblingImport,
-  modelKeyToClassName,
-  resolveApplicationKey,
-  toPascalCase,
-} from "./naming";
+  GeneratorContext,
+  importLineForEnum,
+  importLineForModel,
+  isTypeImported,
+  mergeImportLines,
+  ownerApplicationKey,
+  resolveTypeOwner,
+} from "./context";
+import { enumKeyToClassName, modelKeyToClassName, snakeToCamel } from "./naming";
 
 export interface TypeResolution {
   tsType: string;
@@ -26,25 +25,71 @@ function parseMapType(type: string): string | null {
   return match?.[1] ?? null;
 }
 
-function fqTypeToImport(type: string, importedServices: ApibuilderServiceJson[]): string | null {
-  const match = /^co\.forsyte\.([a-z_]+)\.v0\.models\.([a-z_]+)$/.exec(type);
-  if (!match) {
-    return null;
+function resolveLocalTypeName(typeName: string, context: GeneratorContext): TypeResolution | null {
+  const imports = new Set<string>();
+
+  if (context.rootService.enums?.[typeName]) {
+    return { tsType: enumKeyToClassName(typeName), imports };
   }
-  const [, appKey, modelKey] = match;
-  const owner = importedServices.find((s) => resolveApplicationKey(s) === appKey);
-  if (!owner) {
-    return null;
+
+  if (context.rootService.models?.[typeName]) {
+    return { tsType: modelKeyToClassName(typeName), imports };
   }
-  const appKebab = applicationKeyToKebab(appKey);
-  return `import { ${modelKeyToClassName(modelKey)} } from "../${appKebab}/${appKebab}-dtos";`;
+
+  if (context.rootService.unions?.[typeName]) {
+    return { tsType: modelKeyToClassName(typeName), imports };
+  }
+
+  return null;
 }
 
+function resolveExternalType(type: string, context: GeneratorContext): TypeResolution | null {
+  const owner = resolveTypeOwner(context, type);
+  if (!owner || !owner.imported) {
+    return null;
+  }
+
+  const imports = new Set<string>();
+  const appKey = ownerApplicationKey(owner);
+
+  if (owner.kind === "enum") {
+    imports.add(importLineForEnum(owner.name, appKey));
+    return { tsType: enumKeyToClassName(owner.name), imports };
+  }
+
+  if (owner.kind === "model" || owner.kind === "union") {
+    imports.add(importLineForModel(owner.name, appKey));
+    return { tsType: modelKeyToClassName(owner.name), imports };
+  }
+
+  return null;
+}
+
+export function resolveType(type: string, context: GeneratorContext): TypeResolution;
 export function resolveType(
   type: string,
   rootService: ApibuilderServiceJson,
   importedServices: ApibuilderServiceJson[],
+): TypeResolution;
+export function resolveType(
+  type: string,
+  contextOrRoot: GeneratorContext | ApibuilderServiceJson,
+  importedServices?: ApibuilderServiceJson[],
 ): TypeResolution {
+  const context =
+    importedServices !== undefined
+      ? ({
+          rootService: contextOrRoot as ApibuilderServiceJson,
+          importedServices,
+          allServices: [...importedServices, contextOrRoot as ApibuilderServiceJson],
+          typesByName: new Map(),
+          sortedModelKeys: [],
+          sortedEnumKeys: [],
+          sortedUnionKeys: [],
+          unresolvedTypes: [],
+        } as GeneratorContext)
+      : (contextOrRoot as GeneratorContext);
+
   const imports = new Set<string>();
 
   if (type === "unit") {
@@ -53,39 +98,53 @@ export function resolveType(
 
   const arrayInner = parseArrayType(type);
   if (arrayInner) {
-    const inner = resolveType(arrayInner, rootService, importedServices);
-    inner.imports.forEach((i) => imports.add(i));
+    const inner = resolveType(arrayInner, context);
+    inner.imports.forEach((line) => imports.add(line));
     return { tsType: `${inner.tsType}[]`, imports };
+  }
+
+  if (type === "map") {
+    return { tsType: "Record<string, unknown>", imports };
   }
 
   const mapInner = parseMapType(type);
   if (mapInner) {
-    const inner = resolveType(mapInner, rootService, importedServices);
-    inner.imports.forEach((i) => imports.add(i));
+    const inner = resolveType(mapInner, context);
+    inner.imports.forEach((line) => imports.add(line));
     return { tsType: `Record<string, ${inner.tsType}>`, imports };
   }
 
-  const externalImport = fqTypeToImport(type, importedServices);
-  if (externalImport) {
-    imports.add(externalImport);
-    const modelKey = type.split(".").pop() ?? type;
-    return { tsType: modelKeyToClassName(modelKey), imports };
+  const external = resolveExternalType(type, context);
+  if (external) {
+    external.imports.forEach((line) => imports.add(line));
+    return external;
   }
 
-  if (rootService.enums?.[type]) {
-    return { tsType: enumKeyToClassName(type), imports };
+  const local = resolveLocalTypeName(type, context);
+  if (local) {
+    return local;
   }
 
-  if (rootService.models?.[type]) {
-    return { tsType: modelKeyToClassName(type), imports };
+  if (isTypeImported(context, type)) {
+    const owner = resolveTypeOwner(context, type);
+    if (owner) {
+      const appKey = ownerApplicationKey(owner);
+      if (owner.kind === "enum") {
+        imports.add(importLineForEnum(owner.name, appKey));
+        return { tsType: enumKeyToClassName(owner.name), imports };
+      }
+      imports.add(importLineForModel(owner.name, appKey));
+      return { tsType: modelKeyToClassName(owner.name), imports };
+    }
   }
 
   switch (type) {
     case "string":
     case "uuid":
     case "date-iso8601":
-    case "date-time-iso8601":
       return { tsType: "string", imports };
+    case "date-time-iso8601":
+      return { tsType: "Date", imports };
     case "integer":
     case "long":
       return { tsType: "number", imports };
@@ -102,40 +161,9 @@ export function resolveType(
   }
 }
 
-export function resourceKeyToControllerClassName(resourceKey: string, resourcePath: string): string {
-  if (resourceKey.includes(".")) {
-    const segment = resourceKey.split(".").pop() ?? resourceKey;
-    return `${toPascalCase(pluralize(segment))}Controller`;
-  }
+export { mergeImportLines };
 
-  const pathSegment = resourcePath
-    .split("/")
-    .filter((part) => part && !part.startsWith(":"))
-    .pop();
-
-  if (pathSegment) {
-    const normalized = pathSegment.replace(/-/g, "_");
-    return `${toPascalCase(pluralize(normalized))}Controller`;
-  }
-
-  return `${toPascalCase(pluralize(resourceKey))}Controller`;
-}
-
-export function operationMethodName(method: string, path?: string): string {
-  const verb = method.toLowerCase();
-  if (!path) {
-    return verb;
-  }
-
-  const segments = path
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => toPascalCase(segment.replace(/^:/, "")));
-
-  return `${verb}${segments.join("")}`;
-}
-
-import { snakeToCamel } from "./naming";
+export { resourceToControllerClassName, operationMethodName } from "./nestjs-naming";
 
 export function normalizeControllerPath(resourcePath: string): string {
   if (!resourcePath) {

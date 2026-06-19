@@ -2,37 +2,21 @@
  * HTTP validation against running generator service (localhost:7050).
  * Run: pnpm start:dev (separate terminal) && node scripts/validate-http.mjs
  */
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildForm, STANDARD_IMPORTS, APP_EXTRA_IMPORTS } from "./lib/build-form.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const specDir = join(__dirname, "../../forsyteco-spec");
 const baseUrl = process.env.GENERATOR_URL ?? "http://127.0.0.1:7050";
 
-function loadSpec(filename) {
-  return JSON.parse(readFileSync(join(specDir, filename), "utf8"));
+function importFilesForSpec(specFile) {
+  const key = specFile.replace(".json", "");
+  if (key === "healthcheck") {
+    return [];
+  }
+  const extra = APP_EXTRA_IMPORTS[key] ?? [];
+  return [...STANDARD_IMPORTS, ...extra];
 }
-
-function wrapService(spec, applicationKey) {
-  return {
-    ...spec,
-    organization: { key: "forsyte" },
-    application: { key: applicationKey },
-    version: "0.0.1",
-  };
-}
-
-function buildForm(specFile, importFiles = []) {
-  const spec = loadSpec(specFile);
-  return {
-    service: wrapService(spec, spec.name),
-    imported_services: importFiles.map((file) => wrapService(loadSpec(file), loadSpec(file).name)),
-    attributes: [],
-  };
-}
-
-const STANDARD_IMPORTS = ["error.json", "healthcheck.json", "common.json"];
 
 async function invoke(generatorKey, form) {
   const response = await fetch(`${baseUrl}/invocations/${generatorKey}`, {
@@ -45,10 +29,27 @@ async function invoke(generatorKey, form) {
 }
 
 const checks = [
-  { spec: "healthcheck.json", imports: [], dtoFiles: ["healthcheck-dtos.ts"], ctrlFiles: ["healthcheck-controllers.ts"] },
-  { spec: "error.json", imports: [], dtoFiles: ["error-dtos.ts"], ctrlFiles: [] },
-  { spec: "address.json", imports: STANDARD_IMPORTS, dtoFiles: ["address-enums.ts", "address-dtos.ts"], ctrlFiles: ["address-controllers.ts"] },
-  { spec: "feature_flag.json", imports: STANDARD_IMPORTS, dtoFiles: ["feature-flag-dtos.ts"], ctrlFiles: ["feature-flag-controllers.ts"] },
+  {
+    spec: "healthcheck.json",
+    dtoFiles: ["healthcheck-dtos.ts"],
+    ctrlFiles: ["healthcheck-controllers.ts"],
+  },
+  { spec: "error.json", dtoFiles: ["error-dtos.ts"], ctrlFiles: [] },
+  {
+    spec: "address.json",
+    dtoFiles: ["address-enums.ts", "address-dtos.ts"],
+    ctrlFiles: ["address-controllers.ts"],
+  },
+  {
+    spec: "feature_flag.json",
+    dtoFiles: ["feature-flag-dtos.ts"],
+    ctrlFiles: ["feature-flag-controllers.ts"],
+  },
+  {
+    spec: "data_gateway.json",
+    dtoFiles: ["data-gateway-dtos.ts"],
+    ctrlFiles: ["data-gateway-controllers.ts"],
+  },
 ];
 
 let failed = 0;
@@ -61,14 +62,14 @@ try {
     throw new Error(`Healthcheck failed: ${health.status}`);
   }
   console.log("PASS  server healthcheck");
-} catch (error) {
+} catch {
   console.error("FAIL  server not reachable. Start with: pnpm start:dev");
   process.exit(1);
 }
 
 for (const check of checks) {
-  const form = buildForm(check.spec, check.imports);
-  const label = loadSpec(check.spec).name;
+  const form = buildForm(check.spec, { importFiles: importFilesForSpec(check.spec) });
+  const label = form.service.name;
 
   for (const generatorKey of ["forsyte_nestjs_dtos", "forsyte_nestjs_controllers"]) {
     const expectedFiles = generatorKey.includes("dtos") ? check.dtoFiles : check.ctrlFiles;

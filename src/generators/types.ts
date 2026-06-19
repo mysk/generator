@@ -53,6 +53,10 @@ export interface ApibuilderServiceJson {
         type: string;
         required?: boolean;
         description?: string;
+        default?: string;
+        minimum?: number;
+        maximum?: number;
+        max_length?: number;
       }>;
     }
   >;

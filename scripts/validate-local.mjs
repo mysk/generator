@@ -2,14 +2,14 @@
  * Validates generator output against forsyteco-spec services.
  * Run: pnpm build && node scripts/validate-local.mjs
  */
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { buildForm } from "./lib/build-form.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
-const specDir = join(repoRoot, "../forsyteco-spec");
 const outDir = join(repoRoot, "test-output");
 
 const require = createRequire(import.meta.url);
@@ -17,34 +17,6 @@ const { generateNestJsDtos } = require(join(repoRoot, "dist/generators/implement
 const { generateNestJsControllers } = require(
   join(repoRoot, "dist/generators/implementations/nestjs-controllers/generate-controllers"),
 );
-
-function loadSpec(filename) {
-  return JSON.parse(readFileSync(join(specDir, filename), "utf8"));
-}
-
-function wrapService(spec, applicationKey) {
-  return {
-    ...spec,
-    organization: { key: "forsyte" },
-    application: { key: applicationKey },
-    version: "0.0.1",
-  };
-}
-
-function buildForm(specFile, importFiles = []) {
-  const spec = loadSpec(specFile);
-  const appKey = spec.name;
-  return {
-    service: wrapService(spec, appKey),
-    imported_services: importFiles.map((file) => {
-      const imported = loadSpec(file);
-      return wrapService(imported, imported.name);
-    }),
-    attributes: [],
-  };
-}
-
-const STANDARD_IMPORTS = ["error.json", "healthcheck.json", "common.json"];
 
 function assert(condition, message) {
   if (!condition) {
@@ -54,6 +26,10 @@ function assert(condition, message) {
 
 function fileMap(files) {
   return Object.fromEntries(files.map((f) => [f.name, f]));
+}
+
+function countAbstractClasses(content) {
+  return (content.match(/export abstract class /g) ?? []).length;
 }
 
 const cases = [
@@ -69,7 +45,7 @@ const cases = [
     expectControllers: {
       files: ["healthcheck-controllers.ts"],
       classes: ["HealthchecksController"],
-      methods: ["getHealthz", "getReadyz"],
+      methods: ["healthz", "readyz"],
       returnTypes: ["Promise<HealthcheckDto>"],
       dir: "generated/healthcheck",
     },
@@ -87,7 +63,7 @@ const cases = [
   },
   {
     name: "address",
-    form: () => buildForm("address.json", STANDARD_IMPORTS),
+    form: () => buildForm("address.json"),
     expectDtos: {
       files: ["address-enums.ts", "address-dtos.ts"],
       classes: [
@@ -108,23 +84,29 @@ const cases = [
     expectControllers: {
       files: ["address-controllers.ts"],
       classes: ["AddressesController", "HealthchecksController"],
-      methods: ["postParse", "postResolve", "get", "post", "getAddressId", "putAddressId", "deleteAddressId", "getHealthz"],
+      methods: ["parse", "resolve", "findAll", "create", "findOne", "update", "remove", "healthz"],
       returnTypes: [
         "Promise<AddressParseResultDto>",
         "Promise<AddressDto>",
         "Promise<AddressDto[]>",
         "Promise<void>",
       ],
-      routes: ['@Post("parse")', '@Post("resolve")', "@Controller(':organisationIdOrSlug/addresses')"],
+      routes: [
+        '@Post("parse")',
+        '@Post("resolve")',
+        "@Controller(':organisationIdOrSlug/addresses')",
+        ":addressId",
+      ],
+      nestPatterns: ["Consumer global prefix: /v1alpha"],
       nestPatterns: ["@HttpCode(HttpStatus.OK)", "@HttpCode(HttpStatus.NO_CONTENT)", "@ApiCreatedResponse", "@ApiNoContentResponse"],
-      noPatterns: ["AddressesPostParseHTTP200", "AddressesPutAddressIdResponse"],
+      noPatterns: ["AddressesPostParseHTTP200", "AddressesPutAddressIdResponse", "Hook(", "abstract findOne("],
       imports: ["AddressDto", "AddressParseResultDto", "AddressResolveResultDto"],
       dir: "generated/address",
     },
   },
   {
     name: "feature_flag",
-    form: () => buildForm("feature_flag.json", STANDARD_IMPORTS),
+    form: () => buildForm("feature_flag.json"),
     expectDtos: {
       files: ["feature-flag-dtos.ts"],
       skipEnums: true,
@@ -134,8 +116,47 @@ const cases = [
     },
     expectControllers: {
       files: ["feature-flag-controllers.ts"],
-      classes: ["FlagsController", "AssignmentsController", "HealthchecksController"],
+      classes: ["FeatureFlagsController", "FeatureFlagAssignmentsController", "HealthchecksController"],
+      methods: ["findAll", "findOne"],
+      noPatterns: ["FlagsController", "AssignmentsController", "Hook("],
       dir: "generated/feature-flag",
+    },
+  },
+  {
+    name: "data_gateway",
+    form: () => buildForm("data_gateway.json"),
+    expectDtos: {
+      files: ["data-gateway-enums.ts", "data-gateway-dtos.ts"],
+      classes: ["DataGatewayDto", "DataGatewayFormDto", "AuthorizeConnectionFormDto"],
+      fields: ["connected", "enrollmentTokenTtlMinutes", "configuration"],
+      dir: "generated/data-gateway",
+    },
+    expectControllers: {
+      files: ["data-gateway-controllers.ts"],
+      classes: [
+        "DataGatewaysController",
+        "DataGatewayEnrollmentsController",
+        "DataGatewaySessionsController",
+        "HealthchecksController",
+      ],
+      methods: [
+        "create",
+        "find",
+        "findOne",
+        "update",
+        "remove",
+        "enroll",
+        "completeEnrollment",
+        "authorizeConnection",
+        "organisationsConnected",
+        "connectedOrganisations",
+        "postConnectedOrganisations",
+        "healthz",
+      ],
+      routes: [":dataGatewayId", "@Controller('data-gateway-sessions')", "@Controller(':organisationIdOrSlug/data/gateways')"],
+      noPatterns: ["GatewaysController", "Hook(", "getDataGatewayId", "postHook"],
+      dir: "generated/data-gateway",
+      uniqueClasses: 4,
     },
   },
 ];
@@ -204,10 +225,16 @@ for (const testCase of cases) {
           `${label}: missing abstract class ${className}`,
         );
       }
+      if (testCase.expectControllers.uniqueClasses) {
+        assert(
+          countAbstractClasses(controllersContent) === testCase.expectControllers.uniqueClasses,
+          `${label}: expected ${testCase.expectControllers.uniqueClasses} unique abstract controller classes`,
+        );
+      }
       for (const method of testCase.expectControllers.methods ?? []) {
         assert(
-          controllersContent.includes(`async ${method}(`) || controllersContent.includes(`${method}Hook(`),
-          `${label}: missing operation ${method}`,
+          controllersContent.includes(`${method}(`) && !controllersContent.includes(`abstract ${method}(`),
+          `${label}: missing concrete operation ${method}`,
         );
       }
       for (const route of testCase.expectControllers.routes ?? []) {
@@ -220,7 +247,14 @@ for (const testCase of cases) {
         assert(controllersContent.includes(pattern), `${label}: missing NestJS pattern ${pattern}`);
       }
       for (const pattern of testCase.expectControllers.noPatterns ?? []) {
-        assert(!controllersContent.includes(pattern), `${label}: should not contain ${pattern}`);
+        if (pattern.endsWith("Controller")) {
+          assert(
+            !controllersContent.includes(`export abstract class ${pattern}`),
+            `${label}: should not contain abstract class ${pattern}`,
+          );
+        } else {
+          assert(!controllersContent.includes(pattern), `${label}: should not contain ${pattern}`);
+        }
       }
       for (const importName of testCase.expectControllers.imports ?? []) {
         assert(controllersContent.includes(importName), `${label}: missing import ${importName}`);
@@ -241,7 +275,7 @@ for (const testCase of cases) {
 }
 
 try {
-  const form = buildForm("address.json", STANDARD_IMPORTS);
+  const form = buildForm("address.json");
   const dtoFiles = await generateNestJsDtos(form);
   const addressDtos = fileMap(dtoFiles)["address-dtos.ts"].contents;
   const formSection = addressDtos.split("export class AddressFormDto")[1]?.split("export class")[0] ?? "";
@@ -254,6 +288,23 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   console.log(`FAIL  address-handwritten: ${message}`);
   failures.push({ label: "address-handwritten", message });
+  failed += 1;
+}
+
+try {
+  const form = buildForm("data_gateway.json");
+  const dtoFiles = await generateNestJsDtos(form);
+  const dgDtos = fileMap(dtoFiles)["data-gateway-dtos.ts"].contents;
+  assert(dgDtos.includes("@IsObject()"), "data_gateway-dto-fidelity: map fields should use @IsObject()");
+  assert(dgDtos.includes("@Type(() => Date)"), "data_gateway-dto-fidelity: date-time fields should use @Type(() => Date)");
+  assert(dgDtos.includes("enrollmentTokenTtlMinutes"), "data_gateway-dto-fidelity: enrollment token ttl field");
+  assert(dgDtos.includes("= 15"), "data_gateway-dto-fidelity: default value for enrollment token ttl");
+  console.log("PASS  data_gateway-dto-fidelity");
+  passed += 1;
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.log(`FAIL  data_gateway-dto-fidelity: ${message}`);
+  failures.push({ label: "data_gateway-dto-fidelity", message });
   failed += 1;
 }
 

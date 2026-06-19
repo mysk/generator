@@ -41,13 +41,19 @@ describe("Generator service (e2e)", () => {
     );
   });
 
-  it("GET /generators/:key returns metadata", async () => {
+  it("GET /generators/:key returns metadata with attributes", async () => {
     await request(app.getHttpServer())
-      .get("/generators/forsyte_nestjs_dtos")
+      .get("/generators/forsyte_nestjs_controllers")
       .expect(200)
       .expect((res) => {
-        expect(res.body.key).toBe("forsyte_nestjs_dtos");
+        expect(res.body.key).toBe("forsyte_nestjs_controllers");
         expect(res.body.generate).toBeUndefined();
+        expect(res.body.attributes).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "api_prefix", default: "/v1alpha" }),
+            expect.objectContaining({ name: "bundle_imports" }),
+          ]),
+        );
       });
   });
 
@@ -110,11 +116,16 @@ describe("Generator service (e2e)", () => {
     const names = response.body.files.map((f: { name: string }) => f.name);
     expect(names).toContain("address-controllers.ts");
     const controllers = response.body.files.find((f: { name: string }) => f.name === "address-controllers.ts");
+    expect(controllers.contents).toContain("Consumer global prefix:");
     expect(controllers.contents).toContain("export abstract class AddressesController");
     expect(controllers.contents).toContain("export abstract class HealthchecksController");
     expect(controllers.contents).toContain('@Post("parse")');
+    expect(controllers.contents).toContain("parse(");
+    expect(controllers.contents).toContain("findOne(");
+    expect(controllers.contents).not.toContain("abstract findOne(");
     expect(controllers.contents).not.toContain('@POST("parse")');
     expect(controllers.contents).toContain("Promise<AddressDto>");
     expect(controllers.contents).not.toContain("AddressesPutAddressIdResponse");
+    expect(controllers.contents).not.toContain("Hook(");
   });
 });

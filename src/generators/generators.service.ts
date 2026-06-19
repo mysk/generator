@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { buildContext } from "./builders/context";
 import { getGenerator } from "./generators.registry";
 import { GeneratorError, InvocationForm } from "./types";
 
@@ -36,7 +37,20 @@ export class GeneratorsService {
       message: "Generating code",
       generatorKey: key,
       service: `${form.service.namespace}.${form.service.name ?? form.service.application?.key}`,
+      importedServices: (form.imported_services ?? []).map(
+        (service) => service.name ?? service.application?.key ?? service.namespace,
+      ),
     });
+
+    const context = buildContext(form);
+    if (context.unresolvedTypes.length > 0) {
+      this.logger.warn({
+        message: "Unresolved types in invocation form",
+        generatorKey: key,
+        unresolvedTypeCount: context.unresolvedTypes.length,
+        unresolvedTypes: context.unresolvedTypes,
+      });
+    }
 
     try {
       const files = await generator.generate(form);

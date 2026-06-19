@@ -8,7 +8,20 @@ export const GENERATORS: Record<string, RegisteredGenerator> = {
     name: "Forsyte NestJS DTOs",
     language: "TypeScript",
     description: "NestJS DTOs with class-validator and Swagger decorators",
-    attributes: [],
+    attributes: [
+      {
+        name: "output_root",
+        description: "Consumer project root; generated files land in <output_root>/src/generated/",
+        default: ".",
+        required: false,
+      },
+      {
+        name: "bundle_imports",
+        description: "Comma-separated imported service keys to bundle (e.g. error,healthcheck,common)",
+        default: "error,healthcheck,common",
+        required: false,
+      },
+    ],
     generate: generateNestJsDtos,
   },
   forsyte_nestjs_controllers: {
@@ -19,9 +32,21 @@ export const GENERATORS: Record<string, RegisteredGenerator> = {
       "Controller traits (abstract classes) with routes and response typing — aligned with play_2_9_scala_3_controllers",
     attributes: [
       {
+        name: "output_root",
+        description: "Consumer project root; generated files land in <output_root>/src/generated/",
+        default: ".",
+        required: false,
+      },
+      {
         name: "api_prefix",
-        description: "Global route prefix (unused in Phase 1)",
+        description: "Global route prefix for documentation (consumer applies via setGlobalPrefix)",
         default: "/v1alpha",
+        required: false,
+      },
+      {
+        name: "bundle_imports",
+        description: "Comma-separated imported service keys to bundle (e.g. error,healthcheck,common)",
+        default: "error,healthcheck,common",
         required: false,
       },
     ],
