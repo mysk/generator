@@ -56,4 +56,22 @@ writeFileSync(
   ),
 );
 
+const addressMatchSpec = loadSpec("address_match.json");
+writeFileSync(
+  join(outDir, "address-match-invocation.json"),
+  JSON.stringify(
+    {
+      service: wrapService(addressMatchSpec, "address_match"),
+      imported_services: [
+        wrapService(errorSpec, "error"),
+        wrapService(healthcheckSpec, "healthcheck"),
+        wrapService(commonSpec, "common"),
+      ],
+      attributes: [],
+    },
+    null,
+    2,
+  ),
+);
+
 console.log("Wrote test/fixtures/forms/*.json");

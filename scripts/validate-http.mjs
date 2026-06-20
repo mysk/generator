@@ -37,8 +37,13 @@ const checks = [
   { spec: "error.json", dtoFiles: ["error-dtos.ts"], ctrlFiles: [] },
   {
     spec: "address.json",
-    dtoFiles: ["address-enums.ts", "address-dtos.ts"],
+    dtoFiles: ["address-dtos.ts"],
     ctrlFiles: ["address-controllers.ts"],
+  },
+  {
+    spec: "address_match.json",
+    dtoFiles: ["address-match-enums.ts", "address-match-dtos.ts"],
+    ctrlFiles: ["address-match-controllers.ts"],
   },
   {
     spec: "feature_flag.json",

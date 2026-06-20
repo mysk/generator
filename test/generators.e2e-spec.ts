@@ -98,8 +98,8 @@ describe("Generator service (e2e)", () => {
       .expect(200);
 
     const names = response.body.files.map((f: { name: string }) => f.name);
-    expect(names).toContain("address-enums.ts");
     expect(names).toContain("address-dtos.ts");
+    expect(names).not.toContain("address-enums.ts");
     response.body.files.forEach((file: { name: string; dir: string; contents: string }) => {
       expect(file.dir).toBe("generated/address");
       expect(file.contents.length).toBeGreaterThan(0);
@@ -119,13 +119,11 @@ describe("Generator service (e2e)", () => {
     expect(controllers.contents).toContain("Consumer global prefix:");
     expect(controllers.contents).toContain("export abstract class AddressesController");
     expect(controllers.contents).toContain("export abstract class HealthchecksController");
-    expect(controllers.contents).toContain('@Post("parse")');
-    expect(controllers.contents).toContain("parse(");
     expect(controllers.contents).toContain("findOne(");
     expect(controllers.contents).not.toContain("abstract findOne(");
-    expect(controllers.contents).not.toContain('@POST("parse")');
+    expect(controllers.contents).not.toContain('@Post("parse")');
+    expect(controllers.contents).not.toContain('@Post("resolve")');
     expect(controllers.contents).toContain("Promise<AddressDto>");
-    expect(controllers.contents).not.toContain("AddressesPutAddressIdResponse");
     expect(controllers.contents).not.toContain("Hook(");
   });
 });

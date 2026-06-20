@@ -206,7 +206,7 @@ function emitResourceController(
 
     blocks.push(`  ${routeAndDocDecorators}${validationPipe}
   async ${methodName}(${paramList}): ${promiseReturn} {
-    throw new Error("Not implemented");
+    throw new NotImplementedException();
   }`);
   }
 
@@ -239,7 +239,7 @@ export async function generateNestJsControllers(form: InvocationForm): Promise<G
   const enumImports = context.sortedEnumKeys.map((enumKey) => enumKeyToClassName(enumKey));
 
   const importBlock = [
-    'import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, UsePipes, ValidationPipe } from "@nestjs/common";',
+    'import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotImplementedException, Param, Patch, Post, Put, Query, UsePipes, ValidationPipe } from "@nestjs/common";',
     'import { ApiConflictResponse, ApiCreatedResponse, ApiNoContentResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags, ApiUnauthorizedResponse, ApiUnprocessableEntityResponse } from "@nestjs/swagger";',
     localDtoImports.size > 0
       ? `import { ${Array.from(localDtoImports).sort().join(", ")} } from "${generatedSiblingImport(applicationKey, "dtos")}";`

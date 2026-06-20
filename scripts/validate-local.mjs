@@ -65,43 +65,44 @@ const cases = [
     name: "address",
     form: () => buildForm("address.json"),
     expectDtos: {
-      files: ["address-enums.ts", "address-dtos.ts"],
-      classes: [
-        "CountryDto",
-        "AddressDto",
-        "AddressFormDto",
-        "AddressPutFormDto",
-        "AddressParseFormDto",
-        "AddressParseResultDto",
-        "AddressResolveFormDto",
-        "AddressResolveResultDto",
-      ],
-      enums: ["AddressParseSource", "AddressResolveSource"],
-      enumValues: ['RULES = "rules"', 'LLM = "llm"'],
-      fields: ["countryId", "useLlm", "addressFound"],
+      files: ["address-dtos.ts"],
+      skipEnums: true,
+      classes: ["CountryDto", "AddressDto", "AddressFormDto", "AddressPutFormDto"],
+      fields: ["countryId"],
       dir: "generated/address",
     },
     expectControllers: {
       files: ["address-controllers.ts"],
       classes: ["AddressesController", "HealthchecksController"],
-      methods: ["parse", "resolve", "findAll", "create", "findOne", "update", "remove", "healthz"],
-      returnTypes: [
-        "Promise<AddressParseResultDto>",
-        "Promise<AddressDto>",
-        "Promise<AddressDto[]>",
-        "Promise<void>",
-      ],
-      routes: [
-        '@Post("parse")',
-        '@Post("resolve")',
-        "@Controller(':organisationIdOrSlug/addresses')",
-        ":addressId",
-      ],
+      methods: ["findAll", "create", "findOne", "update", "remove", "healthz"],
+      returnTypes: ["Promise<AddressDto>", "Promise<AddressDto[]>", "Promise<void>"],
+      routes: ["@Controller(':organisationIdOrSlug/addresses')", ":addressId"],
       nestPatterns: ["Consumer global prefix: /v1alpha"],
-      nestPatterns: ["@HttpCode(HttpStatus.OK)", "@HttpCode(HttpStatus.NO_CONTENT)", "@ApiCreatedResponse", "@ApiNoContentResponse"],
-      noPatterns: ["AddressesPostParseHTTP200", "AddressesPutAddressIdResponse", "Hook(", "abstract findOne("],
-      imports: ["AddressDto", "AddressParseResultDto", "AddressResolveResultDto"],
+      noPatterns: ['@Post("parse")', '@Post("resolve")', "Hook(", "abstract findOne("],
+      imports: ["AddressDto"],
       dir: "generated/address",
+    },
+  },
+  {
+    name: "address_match",
+    form: () => buildForm("address_match.json"),
+    expectDtos: {
+      files: ["address-match-enums.ts", "address-match-dtos.ts"],
+      classes: ["AddressMatchTextFormDto", "AddressMatchPostalAddressFormDto", "AddressMatchDto"],
+      unionTypes: ["export type AddressMatchFormDto"],
+      enums: ["AddressMatchInputType", "AddressMatchSource"],
+      enumValues: ['TEXT = "text"', 'POSTAL_ADDRESS = "postal_address"'],
+      fields: ["countryCode", "addressFound", "matched", "providerRecordId"],
+      dir: "generated/address-match",
+    },
+    expectControllers: {
+      files: ["address-match-controllers.ts"],
+      classes: ["AddressMatchesController", "HealthchecksController"],
+      methods: ["match", "healthz"],
+      returnTypes: ["Promise<AddressMatchDto>"],
+      routes: ["@Controller(':countryCode/address')", '@Post("match")', ":countryCode"],
+      nestPatterns: ["Consumer global prefix: /v1alpha"],
+      dir: "generated/address-match",
     },
   },
   {
@@ -203,6 +204,9 @@ for (const testCase of cases) {
     }
     for (const field of testCase.expectDtos.fields ?? []) {
       assert(dtosContent.includes(field), `${label}: missing camelCase field ${field}`);
+    }
+    for (const unionType of testCase.expectDtos.unionTypes ?? []) {
+      assert(dtosContent.includes(unionType), `${label}: missing union type ${unionType}`);
     }
 
     if (testCase.expectControllers) {

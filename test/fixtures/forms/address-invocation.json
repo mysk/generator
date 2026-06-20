@@ -2,7 +2,7 @@
   "service": {
     "name": "address",
     "namespace": "co.forsyte.address.v0",
-    "description": "Organisation address API with parse and resolve helpers. Field names use snake_case in this spec.",
+    "description": "Organisation-scoped address persistence API. Text/postal matching lives in address_match.json. Field names use snake_case in this spec.",
     "imports": [
       {
         "uri": "https://app.apibuilder.io/forsyte/common/latest/service.json"
@@ -14,37 +14,6 @@
         "uri": "https://app.apibuilder.io/forsyte/error/latest/service.json"
       }
     ],
-    "enums": {
-      "address_parse_source": {
-        "values": [
-          {
-            "name": "rules"
-          },
-          {
-            "name": "llm"
-          }
-        ]
-      },
-      "address_resolve_source": {
-        "values": [
-          {
-            "name": "extract_llm"
-          },
-          {
-            "name": "extract_rules"
-          },
-          {
-            "name": "lookup"
-          },
-          {
-            "name": "disambiguation_llm"
-          },
-          {
-            "name": "none"
-          }
-        ]
-      }
-    },
     "models": {
       "country": {
         "fields": [
@@ -158,119 +127,6 @@
             "required": false
           }
         ]
-      },
-      "address_parse_form": {
-        "fields": [
-          {
-            "name": "text",
-            "type": "string"
-          },
-          {
-            "name": "use_llm",
-            "type": "boolean",
-            "required": false
-          }
-        ]
-      },
-      "address_parse_result": {
-        "fields": [
-          {
-            "name": "street",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "city",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "county",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "postcode",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "country_id",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "source",
-            "type": "address_parse_source"
-          },
-          {
-            "name": "complete",
-            "type": "boolean"
-          }
-        ]
-      },
-      "address_resolve_form": {
-        "fields": [
-          {
-            "name": "text",
-            "type": "string"
-          },
-          {
-            "name": "use_llm",
-            "type": "boolean",
-            "required": false
-          }
-        ]
-      },
-      "address_resolve_result": {
-        "fields": [
-          {
-            "name": "address_found",
-            "type": "boolean"
-          },
-          {
-            "name": "resolved",
-            "type": "boolean"
-          },
-          {
-            "name": "street",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "city",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "county",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "postcode",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "country_id",
-            "type": "string",
-            "required": false
-          },
-          {
-            "name": "udprn",
-            "type": "integer",
-            "required": false
-          },
-          {
-            "name": "source",
-            "type": "address_resolve_source"
-          },
-          {
-            "name": "complete",
-            "type": "boolean"
-          }
-        ]
       }
     },
     "resources": {
@@ -291,56 +147,6 @@
       "address": {
         "path": "/:organisation_id_or_slug/addresses",
         "operations": [
-          {
-            "method": "POST",
-            "path": "/parse",
-            "parameters": [
-              {
-                "name": "organisation_id_or_slug",
-                "type": "string",
-                "required": true
-              }
-            ],
-            "body": {
-              "type": "address_parse_form"
-            },
-            "responses": {
-              "200": {
-                "type": "address_parse_result"
-              },
-              "401": {
-                "type": "unit"
-              },
-              "422": {
-                "type": "co.forsyte.error.v0.models.error"
-              }
-            }
-          },
-          {
-            "method": "POST",
-            "path": "/resolve",
-            "parameters": [
-              {
-                "name": "organisation_id_or_slug",
-                "type": "string",
-                "required": true
-              }
-            ],
-            "body": {
-              "type": "address_resolve_form"
-            },
-            "responses": {
-              "200": {
-                "type": "address_resolve_result"
-              },
-              "401": {
-                "type": "unit"
-              },
-              "422": {
-                "type": "co.forsyte.error.v0.models.error"
-              }
-            }
-          },
           {
             "method": "GET",
             "parameters": [
